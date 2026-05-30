@@ -1,0 +1,12 @@
+{
+  "name": "farmacontrol-mifarma",
+  "version": "1.0.0",
+  "description": "App de Control de Deteriorados y Faltantes - Mifarma",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
