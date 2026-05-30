@@ -9,6 +9,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     
+    <!-- Tesseract.js para transcripción de texto (OCR) en fotos de tickets -->
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    
     <!-- Hoja de Estilos Consolidada para evitar bloqueos CORS en file:/// -->
     <style>
 /* ==========================================================================
@@ -1823,6 +1826,21 @@ p {
         transform: translateX(0);
     }
 }
+
+/* Estilos para el Spinner de Carga OCR */
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.ocr-spinner {
+    animation: spin 1s infinite linear;
+}
+.btn-secondary-glow {
+    box-shadow: 0 0 12px rgba(0, 176, 91, 0.1);
+}
+.btn-secondary-glow:hover {
+    background: rgba(0, 176, 91, 0.15) !important;
+    box-shadow: 0 0 20px rgba(0, 176, 91, 0.2);
+}
     </style>
 </head>
 <body class="dark-theme">
@@ -2425,6 +2443,20 @@ p {
                                     </div>
                                 </div>
 
+                                <div class="input-group col-span-2" style="margin-top: 8px;">
+                                    <button type="button" class="btn btn-secondary-glow" id="btn-agregar-producto-lista" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; background: rgba(0, 176, 91, 0.08); border: 1px dashed var(--primary); color: var(--primary); font-weight: 700; height: 46px; border-radius: var(--radius-sm); cursor: pointer; transition: var(--transition);">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                                        Añadir Producto a la Lista
+                                    </button>
+                                </div>
+
+                                <div class="input-group col-span-2 hidden" id="lista-productos-agregados-wrapper" style="background: rgba(255,255,255,0.01); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 16px; margin-top: 10px;">
+                                    <label style="margin-bottom: 12px; display: block; font-weight: 800; font-size: 0.8rem; color: var(--primary); text-transform: uppercase; letter-spacing: 0.05em;">Productos Agregados a este Reporte</label>
+                                    <div id="lista-productos-agregados-items" style="display: flex; flex-direction: column; gap: 10px; max-height: 200px; overflow-y: auto; padding-right: 4px;">
+                                        <!-- Items added dynamically -->
+                                    </div>
+                                </div>
+
                                 <div class="input-group col-span-2">
                                     <label for="reg-comentario">Observación (Máx 300 caracteres)</label>
                                     <textarea id="reg-comentario" maxlength="300" rows="3" placeholder="Ingresa detalles de la incidencia..." required></textarea>
@@ -2569,9 +2601,15 @@ p {
                 </div>
             </div>
 
-            <div class="modal-auditory-history-box">
-                <h4>Observación del Reporte</h4>
-                <p id="modal-detail-obs" style="margin-bottom: 24px; color: var(--text-main); font-weight: 500; font-size: 0.95rem; line-height: 1.5; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1.5px dashed var(--border-color);"></p>
+            <div class="modal-auditory-history-box" id="modal-detail-productos-box" style="display:none; margin-bottom: 20px;">
+                                <h4>Productos Detallados en este Reporte</h4>
+                                <div id="modal-detail-productos-list" style="display:flex; flex-direction:column; gap:8px; margin-bottom:24px; padding: 12px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px solid var(--border-color);">
+                                </div>
+                            </div>
+
+                            <div class="modal-auditory-history-box">
+                                <h4>Observación del Reporte</h4>
+                                <p id="modal-detail-obs" style="margin-bottom: 24px; color: var(--text-main); font-weight: 500; font-size: 0.95rem; line-height: 1.5; padding: 12px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1.5px dashed var(--border-color);"></p>
 
                 <h4>Historial y Auditoría de Estados</h4>
                 <div class="historial-timeline" id="modal-detail-historial"></div>
@@ -2647,6 +2685,18 @@ p {
         </div>
     </div>
 
+    <!-- ================== MODAL: OCR LOADING OVERLAY ================== -->
+    <div id="ocr-loading-overlay" class="modal hidden" style="z-index: 10000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); background: rgba(3, 5, 10, 0.85); position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+        <div style="text-align: center; max-width: 320px; padding: 32px; background: var(--bg-card); border: var(--glass-border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); animation: fadeInUp 0.4s ease;">
+            <div class="ocr-spinner" style="width: 50px; height: 50px; border: 3px solid rgba(0, 176, 91, 0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s infinite linear; margin: 0 auto 20px;"></div>
+            <h4 style="font-weight: 800; font-size: 1.1rem; color: var(--text-main); margin-bottom: 8px;">Transcribiendo Evidencia...</h4>
+            <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 12px;" id="ocr-status-text">Leyendo ticket con Inteligencia Artificial...</p>
+            <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 99px; overflow: hidden;">
+                <div id="ocr-progress-bar" style="width: 0%; height: 100%; background: var(--primary); border-radius: 99px; transition: width 0.2s ease;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Motor JavaScript Consolidado para evitar bloqueos CORS locales -->
     <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -2692,7 +2742,8 @@ document.addEventListener('DOMContentLoaded', () => {
         cameraStream: null,
         selectedCategory: '',
         currentPage: 1,
-        itemsPerPage: 10
+        itemsPerPage: 10,
+        addedProducts: []
     };
 
     // Inicializar localStorage si no existe (Claves actualizadas a v4 para actualización del personal)
@@ -3041,10 +3092,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function updateCalculatedTotal() {
-        const cant = parseInt(regCantidad.value) || 0;
-        const prec = parseFloat(regPrecio.value) || 0;
-        const total = cant * prec;
-        regTotalDisplay.textContent = `S/ ${total.toFixed(2)}`;
+        if (state.addedProducts.length > 0) {
+            const total = state.addedProducts.reduce((sum, p) => sum + p.monto, 0);
+            regTotalDisplay.textContent = `S/ ${total.toFixed(2)}`;
+        } else {
+            const cant = parseInt(regCantidad.value) || 0;
+            const prec = parseFloat(regPrecio.value) || 0;
+            const total = cant * prec;
+            regTotalDisplay.textContent = `S/ ${total.toFixed(2)}`;
+        }
     }
     regCantidad.addEventListener('input', updateCalculatedTotal);
     regPrecio.addEventListener('input', updateCalculatedTotal);
@@ -3060,7 +3116,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Subir Foto y Cargar como Evidencia
+    // Subir Foto, Cargar como Evidencia e Iniciar OCR
     imageUpload.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -3079,11 +3135,238 @@ document.addEventListener('DOMContentLoaded', () => {
                 cameraPlaceholder.classList.add('hidden');
                 btnCameraRemove.classList.remove('hidden');
                 
-                showToast('Foto cargada como evidencia de reporte', 'success');
+                showToast('Foto cargada como evidencia. Iniciando transcripción OCR...', 'success');
+                
+                // Iniciar análisis Tesseract OCR
+                runOcrTranscription(event.target.result);
             };
             img.src = event.target.result;
         };
         reader.readAsDataURL(file);
+    });
+
+    // Función principal de transcripción OCR
+    function runOcrTranscription(imageSrc) {
+        const ocrOverlay = document.getElementById('ocr-loading-overlay');
+        const ocrStatusText = document.getElementById('ocr-status-text');
+        const ocrProgressBar = document.getElementById('ocr-progress-bar');
+
+        if (typeof Tesseract === 'undefined') {
+            showToast('El motor OCR no está cargado. Por favor, asegúrate de estar conectado a Internet.', 'warning');
+            return;
+        }
+
+        ocrOverlay.classList.remove('hidden');
+        ocrStatusText.textContent = 'Inicializando motor OCR...';
+        ocrProgressBar.style.width = '10%';
+
+        Tesseract.recognize(
+            imageSrc,
+            'eng+spa',
+            {
+                logger: m => {
+                    if (m.status === 'recognizing text') {
+                        ocrStatusText.textContent = `Transcribiendo ticket: ${Math.round(m.progress * 100)}%`;
+                        ocrProgressBar.style.width = `${Math.round(m.progress * 90) + 10}%`;
+                    }
+                }
+            }
+        ).then(({ data: { text } }) => {
+            ocrOverlay.classList.add('hidden');
+            parseOcrText(text);
+        }).catch(err => {
+            console.error('Error en OCR:', err);
+            ocrOverlay.classList.add('hidden');
+            showToast('No se pudo transcribir la foto automáticamente. Ingresa los datos manualmente.', 'warning');
+        });
+    }
+
+    // Parser inteligente para extraer los productos y precios del ticket
+    function parseOcrText(text) {
+        console.log("Texto completo extraído:", text);
+        const lines = text.split('\n');
+        let detectedProducts = [];
+        
+        const unitKeywords = {
+            'BLIST': 'blisters',
+            'TAB': 'unidades',
+            'FCO': 'frascos',
+            'FRASCO': 'frascos',
+            'AMP': 'ampollas',
+            'CAJA': 'cajas',
+            'CAP': 'unidades'
+        };
+
+        lines.forEach(line => {
+            const cleanLine = line.trim();
+            if (cleanLine.length < 10) return;
+
+            // Buscar patrones numéricos de precios y cantidades al final de la línea.
+            // Ejemplo: "12.00 1" o "12.90 1" o "12.00 1 12.00"
+            const numbersMatch = cleanLine.match(/(\d+[\.,]\d{2})\s+(\d+)(?:\s+(\d+[\.,]\d{2}))?/);
+            
+            if (numbersMatch) {
+                const price = parseFloat(numbersMatch[1].replace(',', '.'));
+                const quantity = parseInt(numbersMatch[2]) || 1;
+                
+                // La parte anterior de la línea contiene el nombre y presentación
+                const textPart = cleanLine.slice(0, numbersMatch.index).trim();
+                
+                // Remover códigos de barra/producto iniciales si existen (ej. "217491 ", "010009 ")
+                let cleanTextPart = textPart.replace(/^\d+\s+/, '').trim();
+                
+                if (cleanTextPart.length > 3) {
+                    let presentation = 'UNIDADES';
+                    let unit = 'unidades';
+                    
+                    // Identificar unidad de medida
+                    for (const [kw, uVal] of Object.entries(unitKeywords)) {
+                        if (cleanTextPart.toUpperCase().includes(kw)) {
+                            unit = uVal;
+                            break;
+                        }
+                    }
+                    
+                    // Extraer presentación
+                    const presMatch = cleanTextPart.match(/(BLIST[^\s]*|TAB[^\s]*|FCO[^\s]*|CAJA[^\s]*|AMP[^\s]*|FCO\s+\d+\s*ML|BLIST\/\d+\s*TAB)/i);
+                    let productName = cleanTextPart;
+                    
+                    if (presMatch) {
+                        presentation = presMatch[0];
+                        productName = cleanTextPart.slice(0, presMatch.index).trim();
+                    } else {
+                        const words = cleanTextPart.split(/\s+/);
+                        if (words.length > 2) {
+                            presentation = words.slice(-2).join(' ');
+                            productName = words.slice(0, -2).join(' ');
+                        }
+                    }
+
+                    productName = productName.toUpperCase().replace(/[^A-Z0-9\s-\.\/]/g, '').trim();
+                    presentation = presentation.toUpperCase().trim();
+
+                    // Lista de exclusión
+                    const blacklist = ['CLIENTE', 'PRODUCTO', 'DESCRIPCION', 'PRECIO', 'TOTAL', 'CANTIDAD', 'VENDEDOR', 'TIPO', 'CAMBIO', 'ESTACION'];
+                    const isBlacklisted = blacklist.some(bl => productName.includes(bl));
+
+                    if (productName.length > 3 && !isBlacklisted && price > 0) {
+                        detectedProducts.push({
+                            producto: productName,
+                            presentacion: presentation,
+                            unidad: unit,
+                            cantidad: quantity,
+                            precio: price,
+                            monto: parseFloat((price * quantity).toFixed(2)),
+                            lote: '',
+                            fechaVencimiento: ''
+                        });
+                    }
+                }
+            }
+        });
+
+        if (detectedProducts.length > 0) {
+            detectedProducts.forEach(p => {
+                state.addedProducts.push(p);
+            });
+            renderAddedProductsList();
+            updateCalculatedTotal();
+            validateFormFields();
+            showToast(`Se transcribieron ${detectedProducts.length} productos automáticamente del ticket.`, 'success');
+        } else {
+            showToast('No se identificaron productos claros en el ticket. Intenta con otra foto o agrégalos manualmente.', 'warning');
+        }
+    }
+
+    // Renderizar la lista de productos agregados en el formulario
+    function renderAddedProductsList() {
+        const listWrapper = document.getElementById('lista-productos-agregados-wrapper');
+        const listItems = document.getElementById('lista-productos-agregados-items');
+        
+        if (state.addedProducts.length > 0) {
+            listWrapper.classList.remove('hidden');
+            listItems.innerHTML = '';
+            
+            state.addedProducts.forEach((p, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.style.display = 'flex';
+                itemDiv.style.justifyContent = 'space-between';
+                itemDiv.style.alignItems = 'center';
+                itemDiv.style.background = 'rgba(255,255,255,0.02)';
+                itemDiv.style.border = '1px solid var(--border-color)';
+                itemDiv.style.borderRadius = 'var(--radius-sm)';
+                itemDiv.style.padding = '10px 14px';
+                itemDiv.style.fontSize = '0.85rem';
+                itemDiv.style.marginTop = '4px';
+                
+                itemDiv.innerHTML = `
+                    <div style="flex-grow: 1; text-align: left;">
+                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.88rem;">${p.producto}</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 2px;">${p.presentacion} • ${p.cantidad} x S/ ${p.precio.toFixed(2)} (${p.unidad})</div>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <strong style="color: var(--primary); font-size: 0.9rem;">S/ ${p.monto.toFixed(2)}</strong>
+                        <button type="button" class="btn-delete-added-product" data-index="${index}" style="background: none; border: none; color: var(--danger); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 4px;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 16px; height: 16px;"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                        </button>
+                    </div>
+                `;
+                listItems.appendChild(itemDiv);
+            });
+
+            // Configurar botones de eliminar
+            listItems.querySelectorAll('.btn-delete-added-product').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const idx = parseInt(e.currentTarget.getAttribute('data-index'));
+                    state.addedProducts.splice(idx, 1);
+                    renderAddedProductsList();
+                    updateCalculatedTotal();
+                    validateFormFields();
+                });
+            });
+        } else {
+            listWrapper.classList.add('hidden');
+            listItems.innerHTML = '';
+        }
+    }
+
+    // Configurar el botón para agregar el producto a la lista
+    document.getElementById('btn-agregar-producto-lista').addEventListener('click', () => {
+        const hasProd = regProducto.value.trim().length > 0;
+        const hasPres = regPresentacion.value.trim().length > 0;
+        const hasQty = parseInt(regCantidad.value) > 0;
+        const hasPrice = parseFloat(regPrecio.value) >= 0;
+
+        if (!hasProd || !hasPres || !hasQty || !hasPrice) {
+            showToast('Por favor completa todos los campos del producto antes de agregarlo.', 'warning');
+            return;
+        }
+
+        const newP = {
+            producto: regProducto.value.trim().toUpperCase(),
+            presentacion: regPresentacion.value.trim().toUpperCase(),
+            unidad: regUnidad.value,
+            cantidad: parseInt(regCantidad.value),
+            precio: parseFloat(regPrecio.value),
+            monto: parseFloat((parseInt(regCantidad.value) * parseFloat(regPrecio.value)).toFixed(2)),
+            lote: regLote.value.trim(),
+            fechaVencimiento: regVence.value
+        };
+
+        state.addedProducts.push(newP);
+        
+        // Limpiar campos individuales
+        regProducto.value = '';
+        regPresentacion.value = '';
+        regUnidad.value = 'unidades';
+        regCantidad.value = '1';
+        regPrecio.value = '';
+        badgeIaDetected.classList.add('hidden');
+
+        renderAddedProductsList();
+        updateCalculatedTotal();
+        validateFormFields();
+        showToast('Producto agregado al listado de este reporte.', 'success');
     });
 
     // Quitar Evidencia Visual
@@ -3100,10 +3383,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Validar si los campos obligatorios están listos para desbloquear Guardar
     function validateFormFields() {
+        const hasProductsInList = state.addedProducts.length > 0;
+        
         const hasProd = regProducto.value.trim().length > 0;
         const hasPres = regPresentacion.value.trim().length > 0;
         const hasQty = parseInt(regCantidad.value) > 0;
         const hasPrice = parseFloat(regPrecio.value) >= 0;
+        
+        const hasSingleProductFilled = hasProd && hasPres && hasQty && hasPrice;
         const hasCategory = state.selectedCategory !== '';
         
         let hasVencidoFields = true;
@@ -3111,7 +3398,7 @@ document.addEventListener('DOMContentLoaded', () => {
             hasVencidoFields = regLote.value.trim().length > 0 && regVence.value.trim().length > 0;
         }
 
-        btnGuardarRegistro.disabled = !(hasProd && hasPres && hasQty && hasPrice && hasCategory && hasVencidoFields);
+        btnGuardarRegistro.disabled = !((hasProductsInList || hasSingleProductFilled) && hasCategory && hasVencidoFields);
     }
 
     // Agregar listeners de entrada
@@ -3123,6 +3410,8 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetRegistroForm() {
         document.querySelectorAll('.btn-category-toggle').forEach(el => el.classList.remove('active'));
         state.selectedCategory = '';
+        state.addedProducts = [];
+        
         regProducto.value = '';
         regPresentacion.value = '';
         regUnidad.value = 'unidades';
@@ -3148,6 +3437,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
+        renderAddedProductsList();
         btnGuardarRegistro.disabled = true;
         updateCalculatedTotal();
     }
@@ -3158,23 +3448,53 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('registro-incidencia-form').addEventListener('submit', (e) => {
         e.preventDefault();
         
+        const hasProd = regProducto.value.trim().length > 0;
+        const hasPres = regPresentacion.value.trim().length > 0;
+        const hasQty = parseInt(regCantidad.value) > 0;
+        const hasPrice = parseFloat(regPrecio.value) >= 0;
+
+        // Auto-agregar el producto que está escrito si la lista está vacía
+        if (state.addedProducts.length === 0 && hasProd && hasPres && hasQty && hasPrice) {
+            state.addedProducts.push({
+                producto: regProducto.value.trim().toUpperCase(),
+                presentacion: regPresentacion.value.trim().toUpperCase(),
+                unidad: regUnidad.value,
+                cantidad: parseInt(regCantidad.value),
+                precio: parseFloat(regPrecio.value),
+                monto: parseFloat((parseInt(regCantidad.value) * parseFloat(regPrecio.value)).toFixed(2)),
+                lote: regLote.value.trim(),
+                fechaVencimiento: regVence.value
+            });
+        }
+
+        if (state.addedProducts.length === 0) {
+            showToast('Debes agregar al menos un producto al reporte.', 'warning');
+            return;
+        }
+
         const nextIdNum = state.incidencias.length > 0 
             ? Math.max(...state.incidencias.map(i => parseInt(i.id.split('-')[1]))) + 1 
             : 1001;
         const recordId = `REG-${nextIdNum}`;
-        const totalAmount = parseInt(regCantidad.value) * parseFloat(regPrecio.value);
         
+        const totalAmount = state.addedProducts.reduce((sum, p) => sum + p.monto, 0);
+        const primaryProduct = state.addedProducts.map(p => p.producto).join(', ');
+        const primaryPres = state.addedProducts.length > 1 ? 'Multi-Producto' : state.addedProducts[0].presentacion;
+        const primaryUnit = state.addedProducts[0].unidad;
+        const primaryQty = state.addedProducts.reduce((sum, p) => sum + p.cantidad, 0);
+        const primaryPrice = state.addedProducts.length > 1 ? 0 : state.addedProducts[0].precio;
+
         const newRecord = {
             id: recordId,
             fecha: new Date().toISOString(),
             tipo: state.selectedCategory,
             usuarioId: state.currentUser.id,
             usuarioNombre: state.currentUser.nombre,
-            producto: regProducto.value.trim(),
-            presentacion: regPresentacion.value.trim(),
-            unidad: regUnidad.value,
-            cantidad: parseInt(regCantidad.value),
-            precio: parseFloat(regPrecio.value),
+            producto: primaryProduct,
+            presentacion: primaryPres,
+            unidad: primaryUnit,
+            cantidad: primaryQty,
+            precio: primaryPrice,
             monto: parseFloat(totalAmount.toFixed(2)),
             turno: regTurno.value,
             comentario: regComentario.value.trim(),
@@ -3182,6 +3502,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lote: regLote.value.trim(),
             fechaVencimiento: regVence.value,
             imagenUrl: canvas.toDataURL('image/jpeg', 0.7), // Guardar foto en Base64
+            productos: [...state.addedProducts], // Arreglo completo detallado para reportes
             historial: [
                 { fecha: new Date().toISOString(), usuario: state.currentUser.nombre, de: 'creado', a: 'pendiente', comentario: 'Incidencia reportada con evidencia visual.' }
             ]
@@ -3784,7 +4105,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const rec = state.incidencias.find(i => i.id === id);
         if (!rec) return;
 
-        detailTitle.textContent = `${rec.id} - ${rec.producto}`;
+        // Limitar longitud del título del producto para evitar desbordes visuales
+        const rawTitle = `${rec.id} - ${rec.producto}`;
+        detailTitle.textContent = rawTitle.length > 40 ? rawTitle.substring(0, 37) + '...' : rawTitle;
         detailSubtitle.textContent = `Reportado por ${rec.usuarioNombre} • ${formatDateTime(rec.fecha)}`;
         
         if (rec.imagenUrl) {
@@ -3808,6 +4131,36 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             document.getElementById('modal-detail-lote-box').style.display = 'none';
             document.getElementById('modal-detail-vence-box').style.display = 'none';
+        }
+
+        // Renderizar Lista Detallada de Productos si existe en el registro
+        const prodBox = document.getElementById('modal-detail-productos-box');
+        const prodList = document.getElementById('modal-detail-productos-list');
+        prodList.innerHTML = '';
+        if (rec.productos && rec.productos.length > 0) {
+            prodBox.style.display = 'block';
+            rec.productos.forEach(p => {
+                const item = document.createElement('div');
+                item.style.display = 'flex';
+                item.style.justifyContent = 'space-between';
+                item.style.alignItems = 'center';
+                item.style.padding = '8px 12px';
+                item.style.borderBottom = '1px solid rgba(255,255,255,0.03)';
+                item.style.fontSize = '0.85rem';
+                item.innerHTML = `
+                    <div style="text-align: left;">
+                        <strong style="color:var(--text-main); font-size:0.88rem;">${p.producto}</strong>
+                        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">${p.presentacion} (${p.unidad})</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <strong style="color:var(--text-main); font-size:0.88rem;">${p.cantidad} uds</strong>
+                        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">S/ ${p.precio.toFixed(2)} c/u • S/ ${p.monto.toFixed(2)}</div>
+                    </div>
+                `;
+                prodList.appendChild(item);
+            });
+        } else {
+            prodBox.style.display = 'none';
         }
 
         // Renderizar Historial de Auditoría
