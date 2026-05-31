@@ -3155,40 +3155,33 @@ document.addEventListener('DOMContentLoaded', () => {
         ocrStatusText.textContent = 'Conectando con Servidor OCR de Alta Precisión...';
         ocrProgressBar.style.width = '20%';
 
-        // Intentar usar el API profesional Cloud de OCR.space (gratuito, soporta moiré, brillo y LCD)
-        const formData = new FormData();
-        formData.append('base64Image', imageSrc);
-        formData.append('language', 'spa');
-        formData.append('OCREngine', '2'); // Motor 2: especial para recibos, tablas y texto en pantalla
-
-        // Usamos una clave pública gratuita de ocr.space
-        fetch('https://api.ocr.space/parse/image', {
+        // Consultar el endpoint local del backend (Seguro y Libre de CORS)
+        fetch('/api/ocr', {
             method: 'POST',
             headers: {
-                'apikey': 'K87037568588957' // Clave gratuita robusta
+                'Content-Type': 'application/json'
             },
-            body: formData
+            body: JSON.stringify({ image: imageSrc })
         })
         .then(response => {
-            if (!response.ok) throw new Error('API Cloud falló');
+            if (!response.ok) throw new Error('API de backend falló');
             return response.json();
         })
         .then(result => {
             ocrProgressBar.style.width = '80%';
-            if (result && !result.IsErroredOnProcessing && result.ParsedResults && result.ParsedResults.length > 0) {
-                const text = result.ParsedResults[0].ParsedText;
+            if (result && result.text) {
                 ocrProgressBar.style.width = '100%';
                 setTimeout(() => {
                     ocrOverlay.classList.add('hidden');
-                    parseOcrText(text);
+                    parseOcrText(result.text);
                 }, 300);
             } else {
-                console.warn("Cloud OCR falló o dio error, iniciando motor local Tesseract...");
+                console.warn("Servidor OCR falló, iniciando motor local Tesseract...");
                 runLocalTesseractOcr(imageSrc);
             }
         })
         .catch(err => {
-            console.error('Error en Cloud OCR, usando motor local:', err);
+            console.error('Error en Servidor OCR backend, usando motor local:', err);
             runLocalTesseractOcr(imageSrc);
         });
     }
