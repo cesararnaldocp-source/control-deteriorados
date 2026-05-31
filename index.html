@@ -3145,20 +3145,68 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     });
 
-    // Función principal de transcripción OCR
+    // Función principal de transcripción OCR (Versión Profesional Cloud + Local Fallback)
     function runOcrTranscription(imageSrc) {
         const ocrOverlay = document.getElementById('ocr-loading-overlay');
         const ocrStatusText = document.getElementById('ocr-status-text');
         const ocrProgressBar = document.getElementById('ocr-progress-bar');
 
+        ocrOverlay.classList.remove('hidden');
+        ocrStatusText.textContent = 'Conectando con Servidor OCR de Alta Precisión...';
+        ocrProgressBar.style.width = '20%';
+
+        // Intentar usar el API profesional Cloud de OCR.space (gratuito, soporta moiré, brillo y LCD)
+        const formData = new FormData();
+        formData.append('base64Image', imageSrc);
+        formData.append('language', 'spa');
+        formData.append('OCREngine', '2'); // Motor 2: especial para recibos, tablas y texto en pantalla
+
+        // Usamos una clave pública gratuita de ocr.space
+        fetch('https://api.ocr.space/parse/image', {
+            method: 'POST',
+            headers: {
+                'apikey': 'K87037568588957' // Clave gratuita robusta
+            },
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('API Cloud falló');
+            return response.json();
+        })
+        .then(result => {
+            ocrProgressBar.style.width = '80%';
+            if (result && !result.IsErroredOnProcessing && result.ParsedResults && result.ParsedResults.length > 0) {
+                const text = result.ParsedResults[0].ParsedText;
+                ocrProgressBar.style.width = '100%';
+                setTimeout(() => {
+                    ocrOverlay.classList.add('hidden');
+                    parseOcrText(text);
+                }, 300);
+            } else {
+                console.warn("Cloud OCR falló o dio error, iniciando motor local Tesseract...");
+                runLocalTesseractOcr(imageSrc);
+            }
+        })
+        .catch(err => {
+            console.error('Error en Cloud OCR, usando motor local:', err);
+            runLocalTesseractOcr(imageSrc);
+        });
+    }
+
+    // Motor local Tesseract.js (Excelente fallback fuera de línea o sin cuota de API)
+    function runLocalTesseractOcr(imageSrc) {
+        const ocrOverlay = document.getElementById('ocr-loading-overlay');
+        const ocrStatusText = document.getElementById('ocr-status-text');
+        const ocrProgressBar = document.getElementById('ocr-progress-bar');
+
         if (typeof Tesseract === 'undefined') {
-            showToast('El motor OCR no está cargado. Por favor, asegúrate de estar conectado a Internet.', 'warning');
+            ocrOverlay.classList.add('hidden');
+            showToast('El motor OCR no está disponible. Ingresa los datos manualmente.', 'warning');
             return;
         }
 
-        ocrOverlay.classList.remove('hidden');
-        ocrStatusText.textContent = 'Inicializando motor OCR...';
-        ocrProgressBar.style.width = '10%';
+        ocrStatusText.textContent = 'Analizando localmente en el dispositivo (Tesseract)...';
+        ocrProgressBar.style.width = '40%';
 
         Tesseract.recognize(
             imageSrc,
@@ -3166,8 +3214,8 @@ document.addEventListener('DOMContentLoaded', () => {
             {
                 logger: m => {
                     if (m.status === 'recognizing text') {
-                        ocrStatusText.textContent = `Transcribiendo ticket: ${Math.round(m.progress * 100)}%`;
-                        ocrProgressBar.style.width = `${Math.round(m.progress * 90) + 10}%`;
+                        ocrStatusText.textContent = `Procesando imagen local: ${Math.round(m.progress * 100)}%`;
+                        ocrProgressBar.style.width = `${Math.round(m.progress * 50) + 40}%`;
                     }
                 }
             }
@@ -3175,9 +3223,9 @@ document.addEventListener('DOMContentLoaded', () => {
             ocrOverlay.classList.add('hidden');
             parseOcrText(text);
         }).catch(err => {
-            console.error('Error en OCR:', err);
+            console.error('Error en local OCR:', err);
             ocrOverlay.classList.add('hidden');
-            showToast('No se pudo transcribir la foto automáticamente. Ingresa los datos manualmente.', 'warning');
+            showToast('No se pudo procesar la foto automáticamente. Completa los campos de forma manual.', 'warning');
         });
     }
 
