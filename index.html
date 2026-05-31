@@ -3125,20 +3125,38 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = (event) => {
             const img = new Image();
             img.onload = () => {
-                canvas.width = img.width > 640 ? 640 : img.width;
-                canvas.height = img.height > 480 ? 480 : img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                // Escalar manteniendo la proporción exacta con un tamaño máximo optimizado para OCR (1024px)
+                const maxDim = 1024;
+                let w = img.width;
+                let h = img.height;
+                if (w > maxDim || h > maxDim) {
+                    if (w > h) {
+                        h = Math.round((h * maxDim) / w);
+                        w = maxDim;
+                    } else {
+                        w = Math.round((w * maxDim) / h);
+                        h = maxDim;
+                    }
+                }
                 
-                evidencePreviewImg.src = event.target.result;
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, w, h);
+                
+                // Obtener el base64 comprimido y redimensionado del canvas (aprox. 100KB en lugar de 5MB)
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+                
+                // Mostrar la imagen comprimida como vista previa visual
+                evidencePreviewImg.src = compressedBase64;
                 evidencePreviewImg.classList.remove('hidden');
                 cameraPlaceholder.classList.add('hidden');
                 btnCameraRemove.classList.remove('hidden');
                 
-                showToast('Foto cargada como evidencia. Iniciando transcripción OCR...', 'success');
+                showToast('Foto cargada y optimizada. Iniciando transcripción OCR...', 'success');
                 
-                // Iniciar análisis Tesseract OCR
-                runOcrTranscription(event.target.result);
+                // Iniciar análisis OCR usando la imagen optimizada ultraliviana (libre de límites de carga)
+                runOcrTranscription(compressedBase64);
             };
             img.src = event.target.result;
         };
