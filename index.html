@@ -2385,14 +2385,14 @@ p {
                                 <div class="input-group col-span-2">
                                     <label for="reg-producto">Producto</label>
                                     <div class="input-wrapper-scanner">
-                                        <input type="text" id="reg-producto" placeholder="Nombre comercial del medicamento..." required>
+                                        <input type="text" id="reg-producto" placeholder="Nombre comercial del medicamento...">
                                         <span id="badge-ia-detected" class="badge-ia hidden">Sugerido por OCR</span>
                                     </div>
                                 </div>
 
                                 <div class="input-group">
                                     <label for="reg-presentacion">Presentación</label>
-                                    <input type="text" id="reg-presentacion" placeholder="Ej. Tab 500mg x10" required>
+                                    <input type="text" id="reg-presentacion" placeholder="Ej. Tab 500mg x10">
                                 </div>
 
                                 <div class="input-group">
@@ -2418,12 +2418,12 @@ p {
 
                                 <div class="input-group">
                                     <label for="reg-cantidad">Cantidad Afectada</label>
-                                    <input type="number" id="reg-cantidad" min="1" value="1" required>
+                                    <input type="number" id="reg-cantidad" min="1" value="1">
                                 </div>
 
                                 <div class="input-group">
                                     <label for="reg-precio">Costo/Precio Estimado (S/)</label>
-                                    <input type="number" step="0.01" min="0" id="reg-precio" placeholder="S/ 0.00" required>
+                                    <input type="number" step="0.01" min="0" id="reg-precio" placeholder="S/ 0.00">
                                 </div>
 
                                 <div class="input-group">
@@ -3266,13 +3266,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         if (detectedProducts.length > 0) {
-            detectedProducts.forEach(p => {
-                state.addedProducts.push(p);
-            });
-            renderAddedProductsList();
+            // Rellenar los campos manuales en pantalla con el primer producto detectado
+            const first = detectedProducts[0];
+            regProducto.value = first.producto;
+            regPresentacion.value = first.presentacion;
+            regUnidad.value = first.unidad;
+            regCantidad.value = first.cantidad;
+            regPrecio.value = first.precio;
+            badgeIaDetected.classList.remove('hidden');
+            
+            // Si hay más productos detectados, los agregamos directamente al listado inferior
+            if (detectedProducts.length > 1) {
+                for (let i = 1; i < detectedProducts.length; i++) {
+                    state.addedProducts.push(detectedProducts[i]);
+                }
+                renderAddedProductsList();
+            }
+            
             updateCalculatedTotal();
             validateFormFields();
-            showToast(`Se transcribieron ${detectedProducts.length} productos automáticamente del ticket.`, 'success');
+            showToast(`Se transcribió ${first.producto} en los campos manuales. ${detectedProducts.length > 1 ? 'Los demás productos se agregaron al listado inferior.' : ''}`, 'success');
         } else {
             showToast('No se identificaron productos claros en el ticket. Intenta con otra foto o agrégalos manualmente.', 'warning');
         }
